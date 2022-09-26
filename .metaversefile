@@ -1,0 +1,32 @@
+{
+  "name": "phone",
+  "description": "scene edit tool",
+  "start_url": "index.js",
+  "components": [
+    {
+      "key": "physics",
+      "value": true
+    },
+    {
+      "key": "animation",
+      "value": false
+    },
+    {
+      "key": "wear",
+      "value": {
+        "boneAttachment": "leftHand",
+        "position": [-0.1, -0.03, -0.07],
+        "quaternion": [0.6963642, 0.1227878, 0.1227878, 0.6963642]
+      }
+    },
+    {
+      "key": "use",
+      "value": {
+        "behavior": "scene-edit",
+        "boneAttachment": "leftHand",
+        "position": [-0.1, -0.03, -0.07],
+        "quaternion": [0.6963642, 0.1227878, 0.1227878, 0.6963642]
+      }
+    }
+  ]
+}
