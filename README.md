@@ -1,2 +1,2 @@
 # phone-edit-tool
-phone for tilde grabbing
+Phone for tilde grabbing. Emits beam effect while equipped && grabbing.
