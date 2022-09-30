@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 import metaversefile from 'metaversefile';
-const {useApp, useFrame, useLocalPlayer, getAppByInstanceId, useUse, useWear, useCleanup} = metaversefile;
+const {useApp, useFrame, usePhysics, useLocalPlayer, getAppByInstanceId, useUse, useWear, useCleanup} = metaversefile;
+
+const localVector = new THREE.Vector3();
+const localVector2 = new THREE.Vector3();
+const localVector3 = new THREE.Vector3();
+const localQuaternion = new THREE.Quaternion();
+const localMatrix = new THREE.Matrix4();
+const localBox = new THREE.Box3();
+const localBox2 = new THREE.Box3();
+const localEuler = new THREE.Euler();
 
 const baseUrl = import.meta.url.replace(/(\/)[^\/\\]*$/, '$1');
 
@@ -10,6 +19,7 @@ const beamShaderMaterial = new THREE.ShaderMaterial({
       value: 0,
     },
     iResolution: { value: new THREE.Vector3() },
+    distance: { value: 0 }
   },
   vertexShader: `\
       
@@ -36,6 +46,7 @@ const beamShaderMaterial = new THREE.ShaderMaterial({
     ${THREE.ShaderChunk.logdepthbuf_pars_fragment}
     uniform float uTime;
     uniform vec3 iResolution;
+    uniform float distance;
 
     varying vec2 vUv;
     varying vec3 vPos;
@@ -115,9 +126,9 @@ const beamShaderMaterial = new THREE.ShaderMaterial({
     void main() {
       mainImage(gl_FragColor, vUv * iResolution.xy);
       gl_FragColor *= vec4(0.120, 0.280, 1.920, 1.0) * (2. + (vPos.y + 1.8));
-      float scanline = sin((vPos.y + 1.8) * 80.0) * gl_FragColor.b * 0.04;
+      float scanline = sin((vPos.y + 1.8) * 80.0 * distance) * gl_FragColor.b * 0.04;
       gl_FragColor -= scanline;
-      gl_FragColor.a *= pow(vPos.y + 1.8, 3.0);
+      gl_FragColor.a *= pow(vPos.y + 1.8, 2.0);
         
     ${THREE.ShaderChunk.logdepthbuf_fragment}
     }
@@ -130,6 +141,7 @@ const beamShaderMaterial = new THREE.ShaderMaterial({
 
 export default e => {
   const app = useApp();
+  const physics = usePhysics()
   const localPlayer = useLocalPlayer();
   
   const {components} = app;
@@ -178,7 +190,6 @@ export default e => {
     await beamApp.addModule(coneModel);
     beamApp.position.y = 0.13;
     beamApp.position.z = -0.02;
-    // beamApp.scale.set(0.5, 0.5, 0.5);
     coneMesh = beamApp.children[0].children[0];
     coneMesh.material = beamShaderMaterial;
     coneMesh.rotation.x = -Math.PI / 2;
@@ -197,14 +208,44 @@ export default e => {
     using = e.use;
   });
 
+  const getBBCenter = bb => {
+    const x = (bb.min.x + bb.max.x) / 2;
+    const y = (bb.min.y + bb.max.y) / 2;
+    const z = (bb.min.z + bb.max.z) / 2;
+    return localVector.set(x, y, z);
+  };
+
+  const getPhysicalBoundingBox = o => {
+    const physicsObjects = o.getPhysicsObjects();
+
+    // Compute physical local bounding box and it's position offset from app.position.
+    // THREE.Box3.getCenter() has a console error, so I calculate manually.
+    if(physicsObjects) {
+      localBox2.makeEmpty();
+      for(const physicsObject of physicsObjects) {
+        physics.getBoundingBoxForPhysicsId(physicsObject.physicsId, localBox);
+        localBox2.union(localBox);
+      }
+      return localBox2;
+    }
+  };
+
   useFrame(({timestamp}) => {
     const grabAction = localPlayer.getAction('grab');
-    if(grabAction && coneMesh) {
-      const grabbedApp = getAppByInstanceId(grabAction.instanceId);
+    if(wearing && grabAction && coneMesh) {
+      beamApp.matrixWorld.decompose(localVector2, localQuaternion, localVector3);
+      const o = getAppByInstanceId(grabAction.instanceId);
+      const box = getPhysicalBoundingBox(o);
+      const center = getBBCenter(box);
+
+      beamApp.lookAt(center);
+      const distance = localVector2.distanceTo(center);
+      beamApp.scale.set(1, 1, distance).divideScalar(2);
+      beamApp.updateMatrixWorld();
+
       coneMesh.material.uniforms.uTime.value = timestamp / 1000;
       coneMesh.material.uniforms.iResolution.value.set(window.innerWidth, window.innerHeight, 1);
-      beamApp.lookAt(grabbedApp.position);
-      beamApp.updateMatrixWorld();
+      coneMesh.material.uniforms.distance.value = distance;
     } else if(!grabAction && coneMesh && coneMesh.material.uniforms.uTime.value > 0) {
       coneMesh.material.uniforms.uTime.value = 0;
       coneMesh.material.uniforms.iResolution.value.set(0, 0, 0);
